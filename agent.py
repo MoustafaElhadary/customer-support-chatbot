@@ -1,17 +1,22 @@
 from datetime import datetime
+from typing import Annotated
+
 from langchain_anthropic import ChatAnthropic
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable, RunnableConfig
-
-from state import State
-from core_utils import handle_tool_error, create_tool_node_with_fallback, _print_event
+from typing_extensions import TypedDict
+from langgraph.graph.message import AnyMessage, add_messages
 
 from tools.car_rental_tools import search_car_rentals, book_car_rental, update_car_rental, cancel_car_rental
 from tools.excursions_tools import search_trip_recommendations, book_excursion, update_excursion, cancel_excursion
 from tools.flights_tools import search_flights, fetch_user_flight_information, update_ticket_to_new_flight, cancel_ticket
 from tools.hotel_tools import search_hotels, book_hotel, update_hotel, cancel_hotel
 from tools.lookup_tools import lookup_policy
+
+class State(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
+    user_info: str
 
 class Assistant:
     def __init__(self, runnable: Runnable):
@@ -20,7 +25,6 @@ class Assistant:
     def __call__(self, state: State, config: RunnableConfig):
         while True:
             passenger_id = config.get("passenger_id", None)
-            state = {**state, "user_info": passenger_id}
             result = self.runnable.invoke(state)
             # If the LLM happens to return an empty response, we will re-prompt it
             # for an actual response.
@@ -39,13 +43,13 @@ class Assistant:
 # Haiku is faster and cheaper, but less accurate
 # llm = ChatAnthropic(model="claude-3-haiku-20240307")
 llm = ChatAnthropic(model="claude-3-sonnet-20240229", temperature=1)
-# You could swap LLMs, though you will likely want to update the prompts when
-# doing so!
+# You could also use OpenAI or another model, though you will likely have
+# to adapt the prompts
 # from langchain_openai import ChatOpenAI
 
 # llm = ChatOpenAI(model="gpt-4-turbo-preview")
 
-primary_assistant_prompt = ChatPromptTemplate.from_messages(
+assistant_prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
@@ -60,7 +64,7 @@ primary_assistant_prompt = ChatPromptTemplate.from_messages(
     ]
 ).partial(time=datetime.now())
 
-part_1_tools = [
+part_2_tools = [
     TavilySearchResults(max_results=1),
     fetch_user_flight_information,
     search_flights,
@@ -80,4 +84,4 @@ part_1_tools = [
     update_excursion,
     cancel_excursion,
 ]
-part_1_assistant_runnable = primary_assistant_prompt | llm.bind_tools(part_1_tools)
+part_2_assistant_runnable = assistant_prompt | llm.bind_tools(part_2_tools)

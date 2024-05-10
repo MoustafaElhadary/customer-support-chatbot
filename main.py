@@ -3,8 +3,9 @@ import os
 import shutil
 import uuid
 from create_db import backup_file, db
-from graph import part_1_graph
+from graph import part_2_graph
 from core_utils import _print_event
+from langchain_core.messages import ToolMessage
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -32,6 +33,10 @@ tutorial_questions = [
 ]
 
 # Update with the backup file so we can restart from the original place in each section
+import shutil
+import uuid
+
+# Update with the backup file so we can restart from the original place in each section
 shutil.copy(backup_file, db)
 thread_id = str(uuid.uuid4())
 
@@ -47,9 +52,40 @@ config = {
 
 
 _printed = set()
+# We can reuse the tutorial questions from part 1 to see how it does.
 for question in tutorial_questions:
-    events = part_1_graph.stream(
+    events = part_2_graph.stream(
         {"messages": ("user", question)}, config, stream_mode="values"
     )
     for event in events:
         _print_event(event, _printed)
+    snapshot = part_2_graph.get_state(config)
+    while snapshot.next:
+        # We have an interrupt! The agent is
+        # trying to use a tool.
+        # The user can approve or deny it
+        user_input = input(
+            "Do you approve of the above actions? Type 'y' to continue;"
+            " otherwise, explain your requested changed.\n\n"
+        )
+        if user_input.strip() == "y":
+            # Just continue
+            result = part_2_graph.invoke(
+                None,
+                config,
+            )
+        else:
+            # Satisfy the tool invocation by
+            # providing instructions on the requested changes / change of mind
+            result = part_2_graph.invoke(
+                {
+                    "messages": [
+                        ToolMessage(
+                            tool_call_id=event["messages"][-1].tool_calls[0]["id"],
+                            content=f"API call denied by user. Reasoning: '{user_input}'. Continue assisting, accounting for the user's input.",
+                        )
+                    ]
+                },
+                config,
+            )
+        snapshot = part_2_graph.get_state(config)
