@@ -3,7 +3,7 @@ import os
 import shutil
 import uuid
 from create_db import backup_file, db
-from graph import part_2_graph
+from graph import part_3_graph
 from core_utils import _print_event
 from langchain_core.messages import ToolMessage
 
@@ -14,7 +14,21 @@ load_dotenv()
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
 os.environ["LANGCHAIN_PROJECT"] = "Customer Support Bot Tutorial"
 
-# Let's create an example conversation a user might have with the assistant
+
+# Update with the backup file so we can restart from the original place in each section
+shutil.copy(backup_file, db)
+thread_id = str(uuid.uuid4())
+
+config = {
+    "configurable": {
+        # The passenger_id is used in our flight tools to
+        # fetch the user's flight information
+        "passenger_id": "3442 587242",
+        # Checkpoints are accessed by thread_id
+        "thread_id": thread_id,
+    }
+}
+
 tutorial_questions = [
     "Hi there, what time is my flight?",
     "Am i allowed to update my flight to something sooner? I want to leave later today.",
@@ -32,34 +46,16 @@ tutorial_questions = [
     "OK great pick one and book it for my second day there.",
 ]
 
-# Update with the backup file so we can restart from the original place in each section
-import shutil
-import uuid
-
-# Update with the backup file so we can restart from the original place in each section
-shutil.copy(backup_file, db)
-thread_id = str(uuid.uuid4())
-
-config = {
-    "configurable": {
-        # The passenger_id is used in our flight tools to
-        # fetch the user's flight information
-        "passenger_id": "3442 587242",
-        # Checkpoints are accessed by thread_id
-        "thread_id": thread_id,
-    }
-}
-
 
 _printed = set()
 # We can reuse the tutorial questions from part 1 to see how it does.
 for question in tutorial_questions:
-    events = part_2_graph.stream(
+    events = part_3_graph.stream(
         {"messages": ("user", question)}, config, stream_mode="values"
     )
     for event in events:
         _print_event(event, _printed)
-    snapshot = part_2_graph.get_state(config)
+    snapshot = part_3_graph.get_state(config)
     while snapshot.next:
         # We have an interrupt! The agent is
         # trying to use a tool.
@@ -70,14 +66,14 @@ for question in tutorial_questions:
         )
         if user_input.strip() == "y":
             # Just continue
-            result = part_2_graph.invoke(
+            result = part_3_graph.invoke(
                 None,
                 config,
             )
         else:
             # Satisfy the tool invocation by
             # providing instructions on the requested changes / change of mind
-            result = part_2_graph.invoke(
+            result = part_3_graph.invoke(
                 {
                     "messages": [
                         ToolMessage(
@@ -88,4 +84,4 @@ for question in tutorial_questions:
                 },
                 config,
             )
-        snapshot = part_2_graph.get_state(config)
+        snapshot = part_3_graph.get_state(config)
